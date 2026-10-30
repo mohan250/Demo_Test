@@ -1,0 +1,4 @@
+<variable-file delimiters="," filename="C:/temp/Nodata.csv" name="Login" offset="1" order="1" policy="5" range="1" uid="06273514-1bf6-46ec-b6d3-9e81c6d30c1b" useFirstLine="true" whenOutOfValues="CYCLE_VALUES">
+<column name="Password" number="1"/>
+<column name="Username" number="0"/>
+</variable-file>

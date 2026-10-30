@@ -1,0 +1,6 @@
+<basic-logical-action-container element-number="1" execution-type="0"
+    name="click books" pacingEnd="0" pacingMode="MODE_NO_PACING"
+    pacingStart="0" pacingValue="0" slaProfileEnabled="false"
+    uid="05f7e658-bb83-4688-b0e6-312c75a32278" weightsEnabled="false">
+    <weighted-embedded-action uid="dcd1edb8-d75c-417c-b0f6-4098e7507515"/>
+</basic-logical-action-container>
