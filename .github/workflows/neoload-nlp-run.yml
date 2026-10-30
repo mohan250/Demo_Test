@@ -57,17 +57,16 @@ jobs:
           --scenario ${{ env.SCENARIO }}
           createorpatch "DemoWebShop NLP"
 
-      - name: Unpack the project, add the user data and upload
+      - name: Prepare the project, add the user data and upload
         shell: powershell
         run: |
-          $zip = $env:PROJECT_ZIP
           $src = $env:DATA_SOURCE
-          if (-not (Test-Path -LiteralPath $zip)) { throw "Project zip not found: $zip" }
           if (-not (Test-Path -LiteralPath $src)) { throw "Data file not found: $src" }
           if (Test-Path nlp_project) { Remove-Item -Recurse -Force nlp_project }
-          Expand-Archive -LiteralPath $zip -DestinationPath nlp_project -Force
-          $nlp = Get-ChildItem -Path nlp_project -Recurse -Filter *.nlp | Select-Object -First 1
-          if (-not $nlp) { throw "No .nlp file found inside $zip" }
+          New-Item -ItemType Directory -Path nlp_project | Out-Null
+          robocopy . nlp_project /E /XD .git .github nlp_project /NFL /NDL /NJH /NJS | Out-Null
+          $nlp = Get-ChildItem -Path nlp_project -Filter *.nlp | Select-Object -First 1
+          if (-not $nlp) { throw "No .nlp file found in the repository" }
           $dir = $nlp.DirectoryName
           Write-Host "Project file: $($nlp.Name)"
           $target = Join-Path $dir $env:DATA_TARGET
@@ -75,7 +74,6 @@ jobs:
           $lines = @(Get-Content -LiteralPath $src | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
           Set-Content -LiteralPath $target -Value $lines -Encoding ascii
           $rows = $lines.Count - 1
-          Write-Host "Header line: $($lines[0])"
           Write-Host "Data rows copied: $rows"
           if ($rows -lt [int]$env:MIN_ROWS) { throw "Need at least $env:MIN_ROWS data rows, found $rows" }
           neoload project --path "$dir" upload
