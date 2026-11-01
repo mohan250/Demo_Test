@@ -55,11 +55,11 @@ jobs:
       - name: Prepare the project, add the user data and upload
         shell: powershell
         env:
-          # The whole CSV (header + rows) is stored in a GitHub secret.
-          # Only this step can read it.
-          USERS_CSV: ${{ secrets.NEOLOAD_USERS_CSV }}
+          # Only the PATH is stored in the secret. The credentials stay in the file on your drive.
+          DATA_SOURCE: ${{ secrets.NEOLOAD_DATA_PATH }}
         run: |
-          if ([string]::IsNullOrWhiteSpace($env:USERS_CSV)) { throw "Secret NEOLOAD_USERS_CSV is empty or missing" }
+          if ([string]::IsNullOrWhiteSpace($env:DATA_SOURCE)) { throw "Secret NEOLOAD_DATA_PATH is empty or missing" }
+          if (-not (Test-Path -LiteralPath $env:DATA_SOURCE)) { throw "Data file not found at the path in secret NEOLOAD_DATA_PATH. Check the runner can reach it." }
           if (Test-Path nlp_project) { Remove-Item -Recurse -Force nlp_project }
           New-Item -ItemType Directory -Path nlp_project | Out-Null
           robocopy . nlp_project /E /XD .git .github nlp_project /NFL /NDL /NJH /NJS | Out-Null
@@ -69,10 +69,10 @@ jobs:
           Write-Host "Project file: $($nlp.Name)"
           $target = Join-Path $dir $env:DATA_TARGET
           New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-          $lines = @($env:USERS_CSV -split "`r?`n" | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
+          $lines = @(Get-Content -LiteralPath $env:DATA_SOURCE | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
           Set-Content -LiteralPath $target -Value $lines -Encoding ascii
           $rows = $lines.Count - 1
-          Write-Host "Data rows written: $rows"
+          Write-Host "Data rows copied: $rows"
           if ($rows -lt [int]$env:MIN_ROWS) { throw "Need at least $env:MIN_ROWS data rows, found $rows" }
           neoload project --path "$dir" upload
           if ($LASTEXITCODE -ne 0) { throw "neoload project upload failed" }
