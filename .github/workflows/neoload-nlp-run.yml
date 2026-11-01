@@ -15,10 +15,7 @@ on:
         required: true
         description: 'Scenario name in the NeoLoad Controller project (1 users)'
         default: 'scenario1'
-      data_file:
-        required: true
-        description: 'Full path of the users CSV on the runner PC'
-        default: 'C:\temp\Nodata.csv'
+      # data_file input removed: no path or file name is shown in the repo or the run form
 
 permissions:
   contents: read
@@ -28,8 +25,6 @@ env:
   API_URL: ${{ github.event.inputs.api_url }}
   ZONE_ID: ${{ github.event.inputs.zone_id }}
   SCENARIO: ${{ github.event.inputs.scenario }}
-  DATA_SOURCE: ${{ github.event.inputs.data_file }}
-  PROJECT_ZIP: Git_NeoLoad_RD_UserCred.zip
   DATA_TARGET: data\users.csv
   MIN_ROWS: '1'
 
@@ -59,9 +54,12 @@ jobs:
 
       - name: Prepare the project, add the user data and upload
         shell: powershell
+        env:
+          # The whole CSV (header + rows) is stored in a GitHub secret.
+          # Only this step can read it.
+          USERS_CSV: ${{ secrets.NEOLOAD_USERS_CSV }}
         run: |
-          $src = $env:DATA_SOURCE
-          if (-not (Test-Path -LiteralPath $src)) { throw "Data file not found: $src" }
+          if ([string]::IsNullOrWhiteSpace($env:USERS_CSV)) { throw "Secret NEOLOAD_USERS_CSV is empty or missing" }
           if (Test-Path nlp_project) { Remove-Item -Recurse -Force nlp_project }
           New-Item -ItemType Directory -Path nlp_project | Out-Null
           robocopy . nlp_project /E /XD .git .github nlp_project /NFL /NDL /NJH /NJS | Out-Null
@@ -71,10 +69,10 @@ jobs:
           Write-Host "Project file: $($nlp.Name)"
           $target = Join-Path $dir $env:DATA_TARGET
           New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
-          $lines = @(Get-Content -LiteralPath $src | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
+          $lines = @($env:USERS_CSV -split "`r?`n" | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
           Set-Content -LiteralPath $target -Value $lines -Encoding ascii
           $rows = $lines.Count - 1
-          Write-Host "Data rows copied: $rows"
+          Write-Host "Data rows written: $rows"
           if ($rows -lt [int]$env:MIN_ROWS) { throw "Need at least $env:MIN_ROWS data rows, found $rows" }
           neoload project --path "$dir" upload
           if ($LASTEXITCODE -ne 0) { throw "neoload project upload failed" }
@@ -99,3 +97,10 @@ jobs:
           report_paths: junit-sla.xml
           fail_on_test_failures: true
           fail_if_no_tests: false
+
+      # Remove the copy of the user data from the runner, even if a step failed
+      - name: Clean up user data on the runner
+        if: always()
+        shell: powershell
+        run: |
+          if (Test-Path nlp_project) { Remove-Item -Recurse -Force nlp_project }
