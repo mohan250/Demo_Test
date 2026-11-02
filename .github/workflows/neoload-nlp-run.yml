@@ -7,15 +7,33 @@ on:
         required: true
         description: 'NeoLoad Web Api Url'
         default: 'https://neoload-api.saas.neotys.com/'
-      zone_id:
+      controller_zone_id:
         required: true
-        description: 'Zone identifier'
+        description: 'Controller zone (must have 1 controller)'
+        type: choice
         default: 'y1e48'
+        options:
+          - 'y1e48'
+      lg_zone_id:
+        required: true
+        description: 'Load generator zone'
+        type: choice
+        default: 'y1e48'
+        options:
+          - 'y1e48'   # 1 Controller + 1 LG
+          - '4L75K'   # 1 LG only
+      lg_count:
+        required: true
+        description: 'Number of load generators'
+        default: '1'
       scenario:
         required: true
-        description: 'Scenario name in the NeoLoad Controller project (1 users)'
+        description: 'Scenario name in the NeoLoad Controller project (10 users)'
         default: 'scenario1'
-      # data_file input removed: no path or file name is shown in the repo or the run form
+      vu_count:
+        required: true
+        description: 'Number of virtual users in the scenario (used to check the data file)'
+        default: '10'
 
 permissions:
   contents: read
@@ -23,14 +41,17 @@ permissions:
 
 env:
   API_URL: ${{ github.event.inputs.api_url }}
-  ZONE_ID: ${{ github.event.inputs.zone_id }}
+  CONTROLLER_ZONE_ID: ${{ github.event.inputs.controller_zone_id }}
+  LG_ZONE_ID: ${{ github.event.inputs.lg_zone_id }}
+  LG_COUNT: ${{ github.event.inputs.lg_count }}
   SCENARIO: ${{ github.event.inputs.scenario }}
+  VU_COUNT: ${{ github.event.inputs.vu_count }}
   DATA_TARGET: data\users.csv
-  MIN_ROWS: '1'
+  MIN_ROWS: ${{ github.event.inputs.vu_count }}
 
 jobs:
   neoload_nlp_zip:
-    name: NeoLoad Controller project run
+    name: NeoLoad Controller project run (${{ github.event.inputs.vu_count }} VUs)
     runs-on: self-hosted
     steps:
       - name: Checkout the repository
@@ -48,7 +69,8 @@ jobs:
       - name: Prepare NeoLoad test
         run: >-
           neoload test-settings
-          --zone ${{ env.ZONE_ID }}
+          --zone ${{ env.CONTROLLER_ZONE_ID }}
+          --lgs "${{ env.LG_ZONE_ID }}:${{ env.LG_COUNT }}"
           --scenario ${{ env.SCENARIO }}
           createorpatch "DemoWebShop NLP"
 
@@ -72,8 +94,8 @@ jobs:
           $lines = @(Get-Content -LiteralPath $env:DATA_SOURCE | Where-Object { $_.Trim() -ne '' } | ForEach-Object { $_ -replace "`t", "," })
           Set-Content -LiteralPath $target -Value $lines -Encoding ascii
           $rows = $lines.Count - 1
-          Write-Host "Data rows copied: $rows"
-          if ($rows -lt [int]$env:MIN_ROWS) { throw "Need at least $env:MIN_ROWS data rows, found $rows" }
+          Write-Host "Data rows copied: $rows (VUs: $env:VU_COUNT)"
+          if ($rows -lt [int]$env:MIN_ROWS) { throw "Need at least $env:MIN_ROWS data rows for $env:VU_COUNT VUs, found $rows" }
           neoload project --path "$dir" upload
           if ($LASTEXITCODE -ne 0) { throw "neoload project upload failed" }
 
@@ -82,8 +104,8 @@ jobs:
           neoload run
           --external-url ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           --external-url-label "Github Action Run ${{ github.run_number }}"
-          --name "Demo Web Shop NLP - Github build ${{ github.run_number }}"
-          --description "Started from Github Actions"
+          --name "Demo Web Shop NLP - ${{ env.VU_COUNT }} VUs - Github build ${{ github.run_number }}"
+          --description "Started from Github Actions (${{ env.VU_COUNT }} VUs, scenario ${{ env.SCENARIO }})"
 
       - name: Generate Test Report
         id: report
